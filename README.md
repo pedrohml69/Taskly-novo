@@ -6,7 +6,7 @@ O **Taskly** é uma aplicação web de organização de tarefas e rotinas, desen
 
 A versão publicada pode ser acessada pelo link:
 
-**[Abrir Taskly](https://pedrohml69.github.io/Taskly/index.html)**
+**[Abrir Taskly](https://pedrohml69.github.io/Taskly-novo/index.html)**
 
 ## Funcionalidades
 

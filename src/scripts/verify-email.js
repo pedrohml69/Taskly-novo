@@ -128,8 +128,8 @@ resendButton.addEventListener("click", async () => {
     resendButton.disabled = true;
 
     try {
-        await sendEmailVerification(currentUser, {
-            url: new URL("./dashboard.html", window.location.href).href
+       await sendEmailVerification(currentUser, {
+         url: new URL("./dashboard.html", window.location.href).href
         });
         resendBlockedUntil = Date.now() + 30000;
         showStatus("Enviamos outro e-mail de verificação.");

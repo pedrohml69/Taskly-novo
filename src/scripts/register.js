@@ -1,238 +1,215 @@
 
 import {
-    applyActionCode,
-    getIdToken,
-    onAuthStateChanged,
-    reload,
+    createUserWithEmailAndPassword,
     sendEmailVerification,
-    signOut
+    updateProfile
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 
-import { auth } from "./firebase-config.js";
+import {
+    doc,
+    setDoc,
+    serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
-const statusElement = document.getElementById("verificationStatus");
-const emailElement = document.getElementById("emailAddress");
-const checkButton = document.getElementById("checkVerification");
-const resendButton = document.getElementById("resendVerification");
-const continueLink = document.getElementById("continueLink");
-const parameters = new URLSearchParams(window.location.search);
+import {
+    auth,
+    db
+} from "./firebase-config.js";
 
-let currentUser = null;
-let resendBlockedUntil = 0;
+const form = document.querySelector("form");
+
+const nameInput = document.querySelector(
+    'input[placeholder="Nome"]'
+);
+
+const emailInput = document.querySelector(
+    'input[placeholder="Email"]'
+);
+
+const passwordInput = document.querySelector(
+    'input[placeholder="Senha"]'
+);
+
+const confirmPasswordInput = document.querySelector(
+    'input[placeholder="Confirmar Senha"]'
+);
 
 const VERIFY_EMAIL_URL =
     "https://pedrohml69.github.io/Taskly-novo/pages/verify-email.html";
 
-function showStatus(message, isError = false) {
-    statusElement.textContent = message;
-    statusElement.setAttribute("aria-live", isError ? "assertive" : "polite");
-    statusElement.dataset.state = isError ? "error" : "info";
-}
-
-function getDeliveryErrorMessage(code) {
-    if (
-        code === "auth/unauthorized-domain" ||
-        code === "auth/invalid-continue-uri"
-    ) {
-        return "O domínio desta página não está autorizado no Firebase Authentication. Adicione-o à lista Authorized domains e confira a URL de ação do modelo de e-mail.";
-    }
-
-    if (code === "auth/operation-not-allowed") {
-        return "O envio está desativado no Firebase Authentication. Habilite o provedor Email/Password e tente novamente.";
-    }
-
-    if (code === "auth/too-many-requests") {
-        return "O Firebase limitou temporariamente o envio. Aguarde um pouco antes de reenviar.";
-    }
-
-    if (code === "auth/network-request-failed") {
-        return "Falha de conexão ao enviar o e-mail. Verifique sua internet e tente novamente.";
-    }
-
-    return "Não foi possível enviar o e-mail de verificação. Confira as configurações do Firebase e tente reenviar.";
-}
-
-function updateControls() {
-    resendButton.hidden = !currentUser || currentUser.emailVerified;
-    checkButton.hidden = !currentUser || currentUser.emailVerified;
-
-    continueLink.href = currentUser?.emailVerified
-        ? "./dashboard.html"
-        : "./login.html";
-
-    continueLink.textContent = currentUser?.emailVerified
-        ? "Continuar para o Taskly"
-        : "Voltar ao login";
-}
-
-async function refreshVerificationState() {
-    if (!currentUser) {
-        showStatus("Entre após verificar o endereço de e-mail.");
-        updateControls();
-        return;
-    }
-
-    try {
-        await reload(currentUser);
-
-        if (currentUser.emailVerified) {
-            await getIdToken(currentUser, true);
-
-            emailElement.textContent = `E-mail: ${currentUser.email || ""}`;
-
-            showStatus(
-                "E-mail verificado. Você já pode continuar para o Taskly."
-            );
-        } else {
-            emailElement.textContent = `E-mail: ${currentUser.email || ""}`;
-
-            showStatus(
-                "Este endereço ainda não foi verificado. Confira sua caixa de entrada e use o botão de reenvio se não encontrar a mensagem."
-            );
-        }
-    } catch (error) {
-        console.error(
-            "Não foi possível atualizar o estado de verificação:",
-            error
-        );
-
-        showStatus(
-            "Não foi possível verificar o estado da conta. Tente novamente.",
-            true
-        );
-    }
-
-    updateControls();
-}
-
-async function handleVerificationLink() {
-    const mode = parameters.get("mode");
-    const actionCode = parameters.get("oobCode");
-
-    if (mode !== "verifyEmail" || !actionCode) {
-        return;
-    }
-
-    showStatus("Validando o link de verificação...");
-
-    try {
-        await applyActionCode(auth, actionCode);
-
-        if (auth.currentUser) {
-            currentUser = auth.currentUser;
-            await refreshVerificationState();
-        } else {
-            showStatus(
-                "E-mail verificado com sucesso! Entre na sua conta para continuar."
-            );
-
-            updateControls();
-
-            // Redireciona para o login caso não exista sessão ativa.
-            setTimeout(() => {
-                window.location.href = "./login.html";
-            }, 3000);
-        }
-
-        window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname
-        );
-
-    } catch (error) {
-        console.error(
-            "O link de verificação é inválido ou expirou:",
-            error
-        );
-
-        showStatus(
-            "Este link é inválido, expirou ou já foi usado. Entre na sua conta para solicitar outro.",
-            true
-        );
-
-        updateControls();
-    }
-}
-
-checkButton.addEventListener("click", () => {
-    void refreshVerificationState();
-});
-
-resendButton.addEventListener("click", async () => {
-    if (!currentUser || currentUser.emailVerified) {
-        return;
-    }
-
-    if (Date.now() < resendBlockedUntil) {
-        showStatus("Aguarde antes de solicitar outro e-mail.", true);
-        return;
-    }
-
-    resendButton.disabled = true;
-
-    try {
-        await sendEmailVerification(currentUser, {
-            url: VERIFY_EMAIL_URL
-        });
-
-        resendBlockedUntil = Date.now() + 30000;
-
-        showStatus("Enviamos outro e-mail de verificação.");
-
-        setTimeout(() => {
-            resendButton.disabled = false;
-        }, 30000);
-
-    } catch (error) {
-        console.error(
-            "Não foi possível reenviar o e-mail de verificação:",
-            error
-        );
-
-        showStatus(getDeliveryErrorMessage(error.code), true);
-
-        resendButton.disabled = false;
-    }
-});
-
-continueLink.addEventListener("click", async (event) => {
-    if (!currentUser || currentUser.emailVerified) {
-        return;
-    }
+form.addEventListener("submit", async (event) => {
 
     event.preventDefault();
 
+    const name = nameInput.value.trim();
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    const confirmPassword = confirmPasswordInput.value;
+
+    // =========================
+    // VALIDAÇÕES
+    // =========================
+
+    if (name.length < 2) {
+        alert("Digite um nome válido.");
+        return;
+    }
+
+    if (!email) {
+        alert("Digite seu e-mail.");
+        return;
+    }
+
+    if (password.length < 6) {
+        alert("A senha deve possuir pelo menos 6 caracteres.");
+        return;
+    }
+
+    if (password !== confirmPassword) {
+        alert("As senhas não coincidem.");
+        return;
+    }
+
+    const submitButton = form.querySelector(
+        'button[type="submit"]'
+    );
+
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+
     try {
-        await signOut(auth);
+
+        // =========================
+        // CRIA USUÁRIO NO AUTH
+        // =========================
+
+        const userCredential =
+            await createUserWithEmailAndPassword(
+                auth,
+                email,
+                password
+            );
+
+        const user = userCredential.user;
+
+        // =========================
+        // SALVA NOME NO AUTH
+        // =========================
+
+        await updateProfile(user, {
+            displayName: name
+        });
+
+        // =========================
+        // CRIA PERFIL NO FIRESTORE
+        // =========================
+
+        const profileRef = doc(
+            db,
+            "users",
+            user.uid,
+            "profile",
+            "main"
+        );
+
+        await setDoc(profileRef, {
+            name: name,
+            email: user.email,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+
+        // =========================
+        // ENVIA E-MAIL DE VERIFICAÇÃO
+        // =========================
+
+        try {
+
+            await sendEmailVerification(user, {
+                url: VERIFY_EMAIL_URL
+            });
+
+            // Redireciona para a página de verificação.
+            window.location.href = "./verify-email.html";
+
+        } catch (error) {
+
+            console.error(
+                "Não foi possível enviar o e-mail de verificação:",
+                error
+            );
+
+            const deliveryErrorCode =
+                error.code || "unknown";
+
+            window.location.href =
+                `./verify-email.html?delivery=failed&reason=${encodeURIComponent(deliveryErrorCode)}`;
+        }
+
     } catch (error) {
-        console.error("Não foi possível encerrar a sessão:", error);
-    }
 
-    window.location.href = "./login.html";
+        console.error("Erro ao cadastrar:", error);
+
+        // =========================
+        // ERROS DO FIREBASE
+        // =========================
+
+        switch (error.code) {
+
+            case "auth/email-already-in-use":
+                alert("Este e-mail já está em uso.");
+                break;
+
+            case "auth/invalid-email":
+                alert("Digite um e-mail válido.");
+                break;
+
+            case "auth/weak-password":
+                alert("A senha é muito fraca.");
+                break;
+
+            case "auth/network-request-failed":
+                alert("Erro de conexão. Verifique sua internet.");
+                break;
+
+            case "auth/operation-not-allowed":
+                alert(
+                    "O cadastro por e-mail e senha está desativado no Firebase Authentication."
+                );
+                break;
+
+            case "auth/unauthorized-domain":
+                alert(
+                    "Este domínio não está autorizado nas configurações do Firebase Authentication."
+                );
+                break;
+
+            case "auth/api-key-not-valid":
+            case "auth/invalid-api-key":
+            case "auth/project-not-found":
+                alert(
+                    "A configuração do projeto Firebase está inválida. Confira o projeto e a chave em firebase-config.js."
+                );
+                break;
+
+            case "permission-denied":
+                alert(
+                    "A conta do Firebase Authentication pode ter sido criada, mas o perfil foi recusado pelo Firestore. Confira as regras e tente entrar com o mesmo e-mail; não refaça o cadastro."
+                );
+                break;
+
+            default:
+                alert(
+                    `Não foi possível concluir o cadastro (código: ${error.code || "desconhecido"}).`
+                );
+                break;
+        }
+
+    } finally {
+
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
 });
-
-onAuthStateChanged(auth, async (user) => {
-    currentUser = user;
-
-    if (user?.email) {
-        emailElement.textContent = `E-mail: ${user.email}`;
-    }
-
-    updateControls();
-
-    if (parameters.get("delivery") === "failed") {
-        showStatus(
-            getDeliveryErrorMessage(parameters.get("reason")),
-            true
-        );
-    } else if (user) {
-        await refreshVerificationState();
-    } else if (!parameters.has("oobCode")) {
-        showStatus(
-            "Depois de verificar seu e-mail, entre na sua conta para continuar."
-        );
-    }
-});
-
-void handleVerificationLink();

@@ -21,7 +21,7 @@ let currentUser = null;
 let resendBlockedUntil = 0;
 
 const VERIFY_EMAIL_URL =
-    "https://pedrohml69.github.io/Taskly/src/pages/verify-email.html";
+    "https://pedrohml69.github.io/Taskly-novo/pages/verify-email.html";
 
 function showStatus(message, isError = false) {
     statusElement.textContent = message;

@@ -135,7 +135,7 @@ form.addEventListener("submit", async (event) => {
 
         try {
             await sendEmailVerification(user, {
-                url: new URL("./dashboard.html", window.location.href).href
+                url: "https://pedrohml69.github.io/Taskly/src/pages/verify-email.html"
             });
         } catch (error) {
             deliveryFailed = true;
